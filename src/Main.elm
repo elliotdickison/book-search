@@ -57,16 +57,8 @@ update msg model =
             { model | books = books } ! []
 
         Search query ->
-            let
-                results =
-                    if RemoteData.isSuccess model.searchResults then
-                        model.searchResults
-                    else
-                        Loading
-            in
-                { model | searchQuery = query, searchResults = results }
-                    ! [ loadGoogleBooks model.searchQuery |> debounceSendRemoteData "search" 300 SetSearchResults
-                      ]
+            { model | searchQuery = query, searchResults = Loading }
+                ! [ loadAmazonBooks query |> debounceSendRemoteData "search" 300 SetSearchResults ]
 
         SetSearchResults books ->
             { model | searchResults = books } ! []
@@ -121,11 +113,11 @@ debounceSendRemoteData key delay tagger request =
 
 loadBooks : Cmd Msg
 loadBooks =
-    Http.get "https://book-list-1265b.firebaseio.com/books.json" Book.decodeList
+    Http.get "https://book-list-1265b.firebaseio.com/books.json" Book.listDecoder
         |> RemoteData.sendRequest
         |> Cmd.map SetBooks
 
 
-loadGoogleBooks : String -> Http.Request (List Book)
-loadGoogleBooks query =
-    Http.get ("https://www.googleapis.com/books/v1/volumes?printType=books&maxResults=40&orderBy=relevance&q=" ++ query) Book.decodeGoogleList
+loadAmazonBooks : String -> Http.Request (List Book)
+loadAmazonBooks query =
+    Http.get ("https://us-central1-book-list-e82a4.cloudfunctions.net/app/books?q=" ++ query) Book.amazonListDecoder

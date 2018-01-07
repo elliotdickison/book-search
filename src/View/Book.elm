@@ -25,10 +25,10 @@ card book =
     div
         [ css
             [ padding (px 10)
-            , maxWidth minContent
+            , width (pct 14.28)
             ]
         ]
-        [ cover 160 book
+        [ cover book
         , div
             [ css [ marginTop (px 10) ] ]
             [ text book.title ]
@@ -38,22 +38,18 @@ card book =
         ]
 
 
-cover : Float -> Book -> Html msg
-cover width book =
-    let
-        coverUrl =
-            Book.coverUrl book |> Maybe.withDefault ""
-    in
-        div
-            [ css
-                [ paddingTop (pct 150)
-                , height (px 0)
-                , Css.width (px width)
-                , backgroundImage (url coverUrl)
-                , backgroundSize Css.cover
-                , backgroundPosition center
-                , backgroundRepeat noRepeat
-                ]
-            , title book.title
+cover : Book -> Html msg
+cover book =
+    div
+        [ css
+            [ paddingTop (pct 150)
+            , height (px 0)
+            , width (pct 100)
+            , backgroundImage (book.metadata.coverUrl |> Maybe.withDefault "" |> url)
+            , backgroundSize Css.cover
+            , backgroundPosition center
+            , backgroundRepeat noRepeat
             ]
-            []
+        , title book.title
+        ]
+        []

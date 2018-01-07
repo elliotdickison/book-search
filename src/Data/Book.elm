@@ -1,74 +1,99 @@
-module Data.Book exposing (Book, decode, decodeList, decodeGoogleList, coverUrl)
+module Data.Book exposing (Book, decoder, listDecoder, amazonListDecoder)
 
+import Json.Decode as Json exposing (Decoder)
+import Extra.Json.Decode as Json
+import Extra.String as String
 import Time exposing (Time)
-import Json.Decode as Json
-import Data.Identifier as Identifier exposing (Identifier(..))
+import Date
 
 
-type alias Book =
-    { identifiers : List Identifier
-    , title : String
-    , subtitle : Maybe String
-    , authors : List String
-    , description : Maybe String
+type alias Metadata =
+    { subtitle : Maybe String
+    , coverUrl : Maybe String
+    , asin : Maybe String
+    , isbn : Maybe String
     , pageCount : Maybe Int
     , publishedAt : Maybe Time
-    , publisher : Maybe String
+    , publishedBy : Maybe String
     }
 
 
-decode : Json.Decoder Book
-decode =
-    Json.map8 Book
-        Identifier.decodeList
-        (Json.field "title" Json.string)
+type alias Book =
+    { title : String
+    , authors : List String
+    , metadata : Metadata
+    }
+
+
+metadataDecoder : Decoder Metadata
+metadataDecoder =
+    Json.map7 Metadata
         (Json.field "subtitle" Json.string |> Json.maybe)
-        (Json.field "authors" (Json.list Json.string))
-        (Json.field "description" Json.string |> Json.maybe)
+        (Json.field "coverUrl" Json.string |> Json.maybe)
+        (Json.field "asin" Json.string |> Json.maybe)
+        (Json.field "isbn" Json.string |> Json.maybe)
         (Json.field "pageCount" Json.int |> Json.maybe)
         (Json.field "publishedAt" Json.float |> Json.maybe)
-        (Json.field "publisher" Json.string |> Json.maybe)
+        (Json.field "publishedBy" Json.string |> Json.maybe)
 
 
-decodeList : Json.Decoder (List Book)
-decodeList =
-    Json.list decode
+decoder : Decoder Book
+decoder =
+    Json.map3 Book
+        (Json.field "title" Json.string)
+        (Json.field "authors" (Json.list Json.string))
+        (Json.field "metadata" metadataDecoder)
 
 
-decodeGoogleBook : Json.Decoder (Maybe Book)
-decodeGoogleBook =
-    Json.oneOf
-        [ Json.map8 Book
-            Identifier.decodeGoogleList
-            (Json.at [ "volumeInfo", "title" ] Json.string)
-            (Json.at [ "volumeInfo", "subtitle" ] Json.string |> Json.maybe)
-            (Json.at [ "volumeInfo", "authors" ] (Json.list Json.string))
-            (Json.at [ "volumeInfo", "description" ] Json.string |> Json.maybe)
-            (Json.at [ "volumeInfo", "pageCount" ] Json.int |> Json.maybe)
-            (Json.at [ "volumeInfo", "publishedDate" ] Json.float |> Json.maybe)
-            (Json.at [ "volumeInfo", "publisher" ] Json.string |> Json.maybe)
-            |> Json.map
-                (\book ->
-                    if hasIsbn book then
-                        Just book
-                    else
-                        Nothing
-                )
-        , Json.succeed Nothing
-        ]
+listDecoder : Decoder (List Book)
+listDecoder =
+    Json.list decoder
 
 
-decodeGoogleList : Json.Decoder (List Book)
-decodeGoogleList =
-    Json.field "items"
-        (Json.list decodeGoogleBook |> Json.map (List.filterMap identity))
+amazonItemTitleDecoder : Decoder String
+amazonItemTitleDecoder =
+    Json.field "ItemAttributes" (Json.listHead (Json.field "Title" (Json.listHead Json.string)))
+        |> Json.map (String.dropRightOfChar ':')
+        |> Json.map String.dropTrailingParenthetical
+        |> Json.map String.trim
 
 
-hasIsbn : Book -> Bool
-hasIsbn book =
-    List.foldl (\id pass -> pass || Identifier.isIsbn id) False book.identifiers
+amazonItemSubtitleDecoder : Decoder (Maybe String)
+amazonItemSubtitleDecoder =
+    Json.field "ItemAttributes" (Json.listHead (Json.field "Title" (Json.listHead Json.string)))
+        |> Json.map (String.keepRightOfChar ':')
+        |> Json.map String.dropTrailingParenthetical
+        |> Json.map String.trim
+        |> Json.map String.toMaybe
 
 
-coverUrl : Book -> Maybe String
-coverUrl book =
-    book.identifiers |> List.map Identifier.coverUrl |> List.head
+amazonItemPublishedAtDecoder : Decoder (Maybe Time)
+amazonItemPublishedAtDecoder =
+    Json.field "ItemAttributes" (Json.listHead (Json.field "PublicationDate" (Json.listHead Json.date)))
+        |> Json.map Date.toTime
+        |> Json.maybe
+
+
+amazonItemMetadataDecoder : Decoder Metadata
+amazonItemMetadataDecoder =
+    Json.map7 Metadata
+        amazonItemSubtitleDecoder
+        (Json.field "LargeImage" (Json.listHead (Json.field "URL" (Json.listHead Json.string))) |> Json.maybe)
+        (Json.field "ASIN" (Json.listHead Json.string) |> Json.maybe)
+        (Json.field "ItemAttributes" (Json.listHead (Json.field "ISBN" (Json.listHead Json.string))) |> Json.maybe)
+        (Json.field "ItemAttributes" (Json.listHead (Json.field "NumberOfPages" (Json.listHead Json.stringInt))) |> Json.maybe)
+        amazonItemPublishedAtDecoder
+        (Json.field "ItemAttributes" (Json.listHead (Json.field "Publisher" (Json.listHead Json.string))) |> Json.maybe)
+
+
+amazonItemDecoder : Decoder Book
+amazonItemDecoder =
+    Json.map3 Book
+        amazonItemTitleDecoder
+        (Json.field "ItemAttributes" (Json.listHead (Json.field "Author" (Json.list Json.string))))
+        amazonItemMetadataDecoder
+
+
+amazonListDecoder : Decoder (List Book)
+amazonListDecoder =
+    Json.list (amazonItemDecoder |> Json.maybe) |> Json.map (List.filterMap identity)
