@@ -1,20 +1,23 @@
 module Main exposing (..)
 
-import Html
 import Html.Styled exposing (..)
 import Html.Styled.Attributes exposing (css, type_, value)
 import Html.Styled.Events exposing (onInput)
 import Http
-import Debouncer
+import Navigation
+import Route exposing (Route(..))
 import Data.Book as Book exposing (Book)
 import View.App
 import View.Book
 import RemoteData exposing (RemoteData(..))
+import Extra.RemoteData as RemoteData
+import Service.Book
+import Update.Extra exposing (andThen)
 
 
 main : Program Never Model Msg
 main =
-    Html.program
+    Navigation.program (Route.fromLocation >> RouteChanged)
         { init = init
         , view = view >> toUnstyled
         , update = update
@@ -28,16 +31,19 @@ main =
 
 type alias Model =
     { books : RemoteData Http.Error (List Book)
-    , searchQuery : String
     , searchResults : RemoteData Http.Error (List Book)
+    , route : Route
     }
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( Model Loading "" NotAsked
-    , loadBooks
+init : Navigation.Location -> ( Model, Cmd Msg )
+init location =
+    ( Model Loading NotAsked (Route.fromLocation location)
+    , Service.Book.load
+        |> RemoteData.sendRequest
+        |> Cmd.map SetBooks
     )
+        |> andThen update RequestSearchResults
 
 
 
@@ -47,7 +53,9 @@ init =
 type Msg
     = SetBooks (RemoteData Http.Error (List Book))
     | Search String
+    | RequestSearchResults
     | SetSearchResults (RemoteData Http.Error (List Book))
+    | RouteChanged Route
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -57,11 +65,40 @@ update msg model =
             { model | books = books } ! []
 
         Search query ->
-            { model | searchQuery = query, searchResults = Loading }
-                ! [ loadAmazonBooks query |> debounceSendRemoteData "search" 300 SetSearchResults ]
+            case model.route of
+                ReadingList q ->
+                    case q of
+                        Just q ->
+                            model ! [ Route.modifyUrl (ReadingList (Just query)) ]
+
+                        Nothing ->
+                            model ! [ Route.newUrl (ReadingList (Just query)) ]
+
+                _ ->
+                    model ! []
+
+        RequestSearchResults ->
+            case model.route of
+                ReadingList (Just query) ->
+                    if String.isEmpty query then
+                        { model | searchResults = NotAsked } ! []
+                    else
+                        { model | searchResults = Loading }
+                            ! [ Service.Book.searchAmazon query
+                                    |> RemoteData.sendRequestDebounced "search" 300
+                                    |> Cmd.map SetSearchResults
+                              ]
+
+                _ ->
+                    model ! []
 
         SetSearchResults books ->
             { model | searchResults = books } ! []
+
+        RouteChanged route ->
+            { model | route = route }
+                ! []
+                |> andThen update RequestSearchResults
 
 
 
@@ -70,18 +107,27 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-    View.App.chrome
-        [ input [ type_ "text", value model.searchQuery, onInput Search ] []
-        , viewBooks model.books
-        , viewBooks model.searchResults
-        ]
+    let
+        searchQuery =
+            case model.route of
+                ReadingList (Just query) ->
+                    query
+
+                _ ->
+                    ""
+    in
+        View.App.chrome
+            [ input [ type_ "text", value searchQuery, onInput Search ] []
+            , viewBooks model.books
+            , viewBooks model.searchResults
+            ]
 
 
 viewBooks : RemoteData Http.Error (List Book) -> Html Msg
 viewBooks books =
     case books of
         NotAsked ->
-            text "Loading..."
+            text ""
 
         Loading ->
             text "Loading..."
@@ -100,24 +146,3 @@ viewBooks books =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.none
-
-
-
--- HTTP
-
-
-debounceSendRemoteData : String -> Float -> (RemoteData Http.Error a -> Msg) -> Http.Request a -> Cmd Msg
-debounceSendRemoteData key delay tagger request =
-    Debouncer.debounce key delay (RemoteData.fromResult >> tagger) (Http.toTask request)
-
-
-loadBooks : Cmd Msg
-loadBooks =
-    Http.get "https://book-list-1265b.firebaseio.com/books.json" Book.listDecoder
-        |> RemoteData.sendRequest
-        |> Cmd.map SetBooks
-
-
-loadAmazonBooks : String -> Http.Request (List Book)
-loadAmazonBooks query =
-    Http.get ("https://us-central1-book-list-e82a4.cloudfunctions.net/app/books?q=" ++ query) Book.amazonListDecoder
