@@ -19,7 +19,8 @@ type alias Metadata =
 
 
 type alias Book =
-    { title : String
+    { id : String
+    , title : String
     , authors : List String
     , metadata : Metadata
     }
@@ -39,7 +40,8 @@ metadataDecoder =
 
 decoder : Decoder Book
 decoder =
-    Json.map3 Book
+    Json.map4 Book
+        (Json.field "id" Json.string)
         (Json.field "title" Json.string)
         (Json.field "authors" (Json.list Json.string))
         (Json.field "metadata" metadataDecoder)
@@ -74,13 +76,18 @@ amazonItemPublishedAtDecoder =
         |> Json.maybe
 
 
+amazonItemIsbnDecoder : Decoder String
+amazonItemIsbnDecoder =
+    Json.field "ItemAttributes" (Json.listHead (Json.field "ISBN" (Json.listHead Json.string)))
+
+
 amazonItemMetadataDecoder : Decoder Metadata
 amazonItemMetadataDecoder =
     Json.map7 Metadata
         amazonItemSubtitleDecoder
         (Json.field "LargeImage" (Json.listHead (Json.field "URL" (Json.listHead Json.string))) |> Json.maybe)
         (Json.field "ASIN" (Json.listHead Json.string) |> Json.maybe)
-        (Json.field "ItemAttributes" (Json.listHead (Json.field "ISBN" (Json.listHead Json.string))) |> Json.maybe)
+        (amazonItemIsbnDecoder |> Json.maybe)
         (Json.field "ItemAttributes" (Json.listHead (Json.field "NumberOfPages" (Json.listHead Json.stringInt))) |> Json.maybe)
         amazonItemPublishedAtDecoder
         (Json.field "ItemAttributes" (Json.listHead (Json.field "Publisher" (Json.listHead Json.string))) |> Json.maybe)
@@ -88,7 +95,8 @@ amazonItemMetadataDecoder =
 
 amazonItemDecoder : Decoder Book
 amazonItemDecoder =
-    Json.map3 Book
+    Json.map4 Book
+        amazonItemIsbnDecoder
         amazonItemTitleDecoder
         (Json.field "ItemAttributes" (Json.listHead (Json.field "Author" (Json.list Json.string))))
         amazonItemMetadataDecoder

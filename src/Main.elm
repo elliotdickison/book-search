@@ -66,20 +66,20 @@ update msg model =
 
         Search query ->
             case model.route of
-                ReadingList q ->
+                Home q ->
                     case q of
                         Just q ->
-                            model ! [ Route.modifyUrl (ReadingList (Just query)) ]
+                            model ! [ Route.modifyUrl (Home (Just query)) ]
 
                         Nothing ->
-                            model ! [ Route.newUrl (ReadingList (Just query)) ]
+                            model ! [ Route.newUrl (Home (Just query)) ]
 
                 _ ->
                     model ! []
 
         RequestSearchResults ->
             case model.route of
-                ReadingList (Just query) ->
+                Home (Just query) ->
                     if String.isEmpty query then
                         { model | searchResults = NotAsked } ! []
                     else
@@ -110,7 +110,7 @@ view model =
     let
         searchQuery =
             case model.route of
-                ReadingList (Just query) ->
+                Home (Just query) ->
                     query
 
                 _ ->

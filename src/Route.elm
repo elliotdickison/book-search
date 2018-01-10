@@ -29,7 +29,7 @@ import UrlParser as Url
 
 
 type Route
-    = ReadingList (Maybe String)
+    = Home (Maybe String)
     | History
     | NotFound
 
@@ -37,7 +37,7 @@ type Route
 route : Url.Parser (Route -> a) a
 route =
     oneOf
-        [ map ReadingList (s "src" </> s "Main.elm" <?> stringParam "q")
+        [ map Home (s "src" </> s "Main.elm" <?> stringParam "q")
         , map History (s "src" </> s "Main.elm" </> s "history")
         ]
 
@@ -45,10 +45,10 @@ route =
 toUrl : Route -> String
 toUrl route =
     case route of
-        ReadingList Nothing ->
+        Home Nothing ->
             "/src/Main.elm"
 
-        ReadingList (Just q) ->
+        Home (Just q) ->
             "/src/Main.elm?q=" ++ (Http.encodeUri q)
 
         History ->
