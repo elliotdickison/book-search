@@ -1,4 +1,4 @@
-module Data.Book exposing (Book, decoder, listDecoder, amazonListDecoder)
+module Data.Book exposing (Book, fullTitle, decoder, listDecoder, amazonListDecoder)
 
 import Json.Decode as Json exposing (Decoder)
 import Extra.Json.Decode as Json
@@ -26,6 +26,17 @@ type alias Book =
     }
 
 
+fullTitle : Book -> String
+fullTitle book =
+    let
+        subtitle =
+            book.metadata.subtitle
+                |> Maybe.map (\t -> ": " ++ t)
+                |> Maybe.withDefault ""
+    in
+        book.title ++ subtitle
+
+
 metadataDecoder : Decoder Metadata
 metadataDecoder =
     Json.map7 Metadata
@@ -49,7 +60,7 @@ decoder =
 
 listDecoder : Decoder (List Book)
 listDecoder =
-    Json.list decoder
+    Json.tolerantList decoder
 
 
 amazonItemTitleDecoder : Decoder String
@@ -104,4 +115,4 @@ amazonItemDecoder =
 
 amazonListDecoder : Decoder (List Book)
 amazonListDecoder =
-    Json.list (amazonItemDecoder |> Json.maybe) |> Json.map (List.filterMap identity)
+    Json.tolerantList amazonItemDecoder

@@ -25,7 +25,12 @@ card book =
     div
         [ css
             [ padding (px 10)
-            , width (pct 14.28)
+            , width (pct 20)
+            , property "transition" "all 0.3s ease"
+            , hover
+                [ boxShadow4 (px 0) (px 5) (px 20) (rgba 0 0 0 0.15)
+                , transform (translateY (px -5))
+                ]
             ]
         ]
         [ cover book
@@ -50,6 +55,6 @@ cover book =
             , backgroundPosition center
             , backgroundRepeat noRepeat
             ]
-        , title book.title
+        , title (Book.fullTitle book)
         ]
         []

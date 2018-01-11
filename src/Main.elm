@@ -9,6 +9,7 @@ import Route exposing (Route(..))
 import Data.Book as Book exposing (Book)
 import View.App
 import View.Book
+import View.Input
 import RemoteData exposing (RemoteData(..))
 import Extra.RemoteData as RemoteData
 import Service.Book
@@ -54,7 +55,7 @@ type Msg
     = SetBooks (RemoteData Http.Error (List Book))
     | Search String
     | RequestSearchResults
-    | SetSearchResults (RemoteData Http.Error (List Book))
+    | SetSearchResults String (RemoteData Http.Error (List Book))
     | RouteChanged Route
 
 
@@ -85,15 +86,23 @@ update msg model =
                     else
                         { model | searchResults = Loading }
                             ! [ Service.Book.searchAmazon query
-                                    |> RemoteData.sendRequestDebounced "search" 300
-                                    |> Cmd.map SetSearchResults
+                                    |> RemoteData.sendRequestDebounced "search" 200
+                                    |> Cmd.map (SetSearchResults query)
                               ]
 
                 _ ->
                     model ! []
 
-        SetSearchResults books ->
-            { model | searchResults = books } ! []
+        SetSearchResults query books ->
+            case model.route of
+                Home (Just q) ->
+                    if query == q then
+                        { model | searchResults = books } ! []
+                    else
+                        model ! []
+
+                _ ->
+                    model ! []
 
         RouteChanged route ->
             { model | route = route }
@@ -117,7 +126,7 @@ view model =
                     ""
     in
         View.App.chrome
-            [ input [ type_ "text", value searchQuery, onInput Search ] []
+            [ View.Input.input [ type_ "text", value searchQuery, onInput Search ] []
             , viewBooks model.books
             , viewBooks model.searchResults
             ]

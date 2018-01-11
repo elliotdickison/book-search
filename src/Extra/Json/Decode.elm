@@ -1,7 +1,13 @@
-module Extra.Json.Decode exposing (listHead, stringInt, date)
+module Extra.Json.Decode exposing (tolerantList, listHead, stringInt, date)
 
 import Json.Decode as Json exposing (Decoder)
 import Date exposing (Date)
+
+
+tolerantList : Decoder a -> Decoder (List a)
+tolerantList itemDecoder =
+    Json.list (Json.maybe itemDecoder)
+        |> Json.map (List.filterMap identity)
 
 
 listHead : Decoder a -> Decoder a
